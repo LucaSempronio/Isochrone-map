@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+{% extends 'layout.html' %}
+
+{% block title %}
+Trial Inter Page
+{% endblock %}
+
+{% block content %}
+<h1>Welcome to the Trial Inter Page</h1>
+<p>This is the trial inter page content.</p>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Map Example</title>
+  <style>
+    /* Add some styling to the input and dropdown */
+    input,
+    select {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 16px;
+      padding: 5px;
+    }
+  </style>
+</head>
+
+<body>
+
+
+  <!-- Create the div to hold the map -->
+  <div id="map" style="width: 500px; height: 500px;"></div>
+
+
+  <script>
+    // Initialize the Google Maps JavaScript API
+    function initMap() {
+      // Set the map center and zoom level
+      var map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: { lat: 40.748817, lng: -73.985428 }
+      });
+
+      // Set the isochrone options
+      var location = new google.maps.LatLng(40.748817, -73.985428);
+      var isochroneOptions = {
+        location: location,
+        travelMode: google.maps.TravelMode.WALKING,
+        time: [10, 20, 30, 40, 50, 60]
+      };
+
+      // Initialize the isochrone service
+      var isochroneService = new google.maps.IsochroneService();
+
+      // Call the isochrone service and display the polygons on the map
+      isochroneService.getIsochrone(isochroneOptions, function (response) {
+        console.log('Isochrone response:', response);
+        for (var i = 0; i < response.length; i++) {
+          new google.maps.Polygon({
+            map: map,
+            paths: response[i].path,
+            strokeColor: '#FF0000',
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: '#FF0000',
+            fillOpacity: 0.35
+          });
+          console.log('Polygon:', polygon);
+          polygon.setMap(map);
+        }
+      });
+    }
+  </script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&callback=initMap">
+  </script>
+
+</body>
+
+
+{% endblock %}

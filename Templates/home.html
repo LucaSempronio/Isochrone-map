@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+{% extends 'layout.html' %}
+
+{% block title %}
+Home Page
+{% endblock %}
+
+{% block content %}
+<h1>Welcome to the Basic Map Page</h1>
+<p>This is the Basic Map page content.</p>
+
+<head>
+    <title>Map Example</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&callback=initMap" async defer></script>
+</head>
+
+<body>
+    <div id="map" style="width: 500px; height: 500px;"></div>
+    <script>
+        function initMap() {
+            // Specify custom map style
+            var customStyle = [
+                /* {
+                    featureType: "poi",
+                    elementType: "labels",
+                    stylers: [{ visibility: "off" }]
+                }, {
+                    featureType: "transit.station",
+                    elementType: "labels.icon",
+                    stylers: [{ visibility: "off" }]
+                }, {
+                    featureType: "road",
+                    elementType: "labels.icon",
+                    stylers: [
+                        {
+                            visibility: "off",
+                        },
+                    ],
+                } */
+                {
+                    featureType: "all",
+                    elementType: "labels",
+                    stylers: [
+                        {
+                            visibility: "off",
+                        },
+                    ],
+                }
+            ];
+            const map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 37.7749, lng: -122.4194 },
+                zoom: 12,
+                styles: customStyle,
+                streetViewControl: false, mapTypeControlOptions:
+                {
+                    mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.TERRAIN]
+                }
+            });
+
+            const area = new google.maps.Polygon({
+                paths: [
+                    { lat: 37.766779, lng: -122.447615 },
+                    { lat: 37.771542, lng: -122.430127 },
+                    { lat: 37.789498, lng: -122.408175 },
+                    { lat: 37.798007, lng: -122.436586 },
+                    { lat: 37.777295, lng: -122.439577 },
+                ],
+                strokeColor: "#FF0000",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: "#FF0000",
+                fillOpacity: 0.35,
+            });
+
+            area.setMap(map);
+        }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&callback=initMap"></script>
+</body>
+
+{% endblock %}

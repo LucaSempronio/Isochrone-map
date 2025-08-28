@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+{% extends 'layout.html' %} {% block title %} Trial Inter Page {% endblock %} {%
+block content %}
+<h1>Welcome to the Trial Inter Page</h1>
+<p>This is the trial inter page content.</p>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Map Example</title>
+  <style>
+    /* Add some styling to the input and dropdown */
+    input,
+    select {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 16px;
+      padding: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <p id="status-message">Ready</p>
+  <p id="area-30">Ready</p>
+  <p id="area-20">Ready</p>
+  <p id="area-10">Ready</p>
+
+  <!-- Create the div to hold the map -->
+  <div id="map" style="width: 500px; height: 500px"></div>
+
+  <!-- Include the Google Maps API script -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAAaBbOLTG04ZZdNzjiUCqHw_YDB1FOmlY&libraries=geometry,places&callback=initMap"
+    async
+    defer
+  ></script>
+  <!--include turf library-->>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf/turf.min.js"></script>
+
+  <!-- Add the JavaScript code to initialize the map and handle the input and dropdown selection -->
+  <script>
+    var map;
+    var originalMarker;
+    let currentPolygon = null;
+    let viablePolygon = null;
+
+    function updateStatusMessage(message) {
+      document.getElementById("status-message").innerText = message;
+    }
+    function updatearea30Message(message) {
+      document.getElementById("area-30").innerText = message;
+    }
+    function updatearea20Message(message) {
+      document.getElementById("area-20").innerText = message;
+    }
+    function updatearea10Message(message) {
+      document.getElementById("area-10").innerText = message;
+    }
+
+    function clearCurrentPolygon() {
+      if (currentPolygon) {
+        currentPolygon.setMap(null);
+        currentPolygon = null;
+      }
+      if (viablePolygon) {
+        viablePolygon.setMap(null);
+        viablePolygon = null;
+      }
+    }
+    //
+    //FUNCTION TO DRAW THE POLYGON IN RED
+    //
+    function drawPolygon(points) {
+      // Create a new polygon using the provided points
+      currentPolygon = new google.maps.Polygon({
+        paths: points,
+        strokeColor: "#FF0000",
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: "#FF0000",
+        fillOpacity: 0.35,
+        map: map,
+      });
+    }
+    //
+    //FUNCTION TO DRAW THE POLYGON IN GREEN
+    //
+    function drawViablePolygon(points, color) {
+      // Create a new polygon using the provided points
+      viablePolygon = new google.maps.Polygon({
+        paths: points,
+        strokeColor: color,
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: color,
+        fillOpacity: 0.35,
+        map: map,
+      });
+      // Update the polygon's properties
+      viablePolygon.setOptions({
+        strokeColor: color,
+        fillColor: color,
+      });
+    }
+    //
+    //Calculate polygon area
+    //
+    function convertInRangePointsToCoordinates(inRangePoints) {
+      const coordinates = inRangePoints.map((point) => [
+        point.lng(),
+        point.lat(),
+      ]);
+
+      // Make sure the first and last positions are the same
+      if (
+        coordinates.length > 0 &&
+        coordinates[0] !== coordinates[coordinates.length - 1]
+      ) {
+        coordinates.push(coordinates[0]);
+      }
+
+      return coordinates;
+    }
+
+    function calculatePolygonArea(coordinates) {
+      // Create a GeoJSON Polygon object from the coordinates
+      const polygon = turf.polygon([coordinates]);
+
+      // Calculate the area in square meters
+      const area = turf.area(polygon);
+
+      return area;
+    }
+    //
+    //GENERATES *NUMBER_OF_POINTS* AROUND AN CENTER, ALL EQUALLY SPACED
+    //
+    function generatePointsAround(center, radiusInMiles, numberOfPoints) {
+      const points = [];
+      // Convert radius from miles to kilometers
+      const radius = radiusInMiles * 1.60934;
+
+      for (let i = 0; i < numberOfPoints; i++) {
+        const angle = (2 * Math.PI * i) / numberOfPoints;
+        const dx = radius * Math.cos(angle);
+        const dy = radius * Math.sin(angle);
+
+        const lat = center.lat() + (180 * dy) / (6371 * Math.PI);
+        const lng =
+          center.lng() +
+          (180 * dx) /
+            (6371 * Math.PI * Math.cos((Math.PI * center.lat()) / 180));
+
+        points.push(new google.maps.LatLng(lat, lng));
+      }
+      return points;
+    }
+    //
+    //GETS POINTS THAT ARE WITHIN A TIME THRESHOLD
+    //
+    /* 
+        origin: A google.maps.LatLng object representing the origin point.
+        points: A list of google.maps.LatLng objects representing the destination points.
+        travelMode: A google.maps.TravelMode value specifying the mode of transportation.
+        threshold: The time threshold in minutes.
+        callback: A callback function that will be called with the result. It should have the signature (error, filteredPoints), where error is an error object if the request failed, and filteredPoints is the list of filtered points if the request succeeded.
+ */
+    async function getPointsWithinTimeThreshold(
+      origin,
+      points,
+      travelMode,
+      threshold
+    ) {
+      const filteredPoints = [];
+      const maxIterations = 40; // Maximum number of attempts to move the points closer
+      const moveFactor = 0.05; // Fraction of the distance to move the point closer to the origin
+
+      for (const point of points) {
+        let currentPoint = point;
+        let iterations = 0;
+        let isInThreshold = false;
+
+        while (iterations < maxIterations) {
+          try {
+            const inRange = await isPointWithinTimeThreshold(
+              origin,
+              [currentPoint],
+              travelMode,
+              threshold
+            );
+            if (inRange) {
+              isInThreshold = true;
+              break;
+            }
+          } catch (error) {
+            console.error("Error:", error);
+          }
+
+          // Move the point closer to the origin
+          const latDiff = origin.lat() - currentPoint.lat();
+          const lngDiff = origin.lng() - currentPoint.lng();
+
+          currentPoint = new google.maps.LatLng(
+            currentPoint.lat() + moveFactor * latDiff,
+            currentPoint.lng() + moveFactor * lngDiff
+          );
+
+          iterations++;
+        }
+
+        if (isInThreshold) {
+          filteredPoints.push(currentPoint);
+        }
+      }
+
+      return filteredPoints;
+    }
+
+    function isPointWithinTimeThreshold(origin, points, travelMode, threshold) {
+      return new Promise((resolve, reject) => {
+        const distanceMatrixService = new google.maps.DistanceMatrixService();
+
+        distanceMatrixService.getDistanceMatrix(
+          {
+            origins: [origin],
+            destinations: points,
+            travelMode: travelMode,
+            unitSystem: google.maps.UnitSystem.IMPERIAL,
+          },
+          function (response, status) {
+            if (status === google.maps.DistanceMatrixStatus.OK) {
+              const element = response.rows[0].elements[0];
+
+              if (element.status === "OK") {
+                const duration = element.duration.value / 60; // Convert to minutes
+                resolve(duration <= threshold);
+              } else {
+                resolve(false);
+              }
+            } else {
+              const error = new Error(
+                "Distance Matrix request failed: " + status
+              );
+              reject(error);
+            }
+          }
+        );
+      });
+    }
+    async function processMultipleOrigins(origins) {
+      const radiusInMiles = 5; // Set the desired radius in miles
+      const numberOfPoints = 18; // Set the desired number of points
+      const travelMode = google.maps.TravelMode.WALKING;
+
+      for (const origin of origins) {
+        const points = generatePointsAround(
+          origin,
+          radiusInMiles,
+          numberOfPoints
+        );
+
+        try {
+          const inRangePoints30 = await getPointsWithinTimeThreshold(
+            origin,
+            points,
+            travelMode,
+            30
+          );
+          console.log("Filtered points (30 min):", inRangePoints30);
+          drawViablePolygon(inRangePoints30, "4E164B");
+          updateStatusMessage("Calculating (1/3)...");
+
+          const inRangePoints20 = await getPointsWithinTimeThreshold(
+            origin,
+            inRangePoints30,
+            travelMode,
+            20
+          );
+          console.log("Filtered points (20 min):", inRangePoints20);
+          drawViablePolygon(inRangePoints20, "B93344");
+          updateStatusMessage("Calculating (2/3)...");
+
+          const inRangePoints10 = await getPointsWithinTimeThreshold(
+            origin,
+            inRangePoints20,
+            travelMode,
+            10
+          );
+          console.log("Filtered points (10 min):", inRangePoints10);
+          drawViablePolygon(inRangePoints10, "FB7B42");
+          updateStatusMessage("Complete");
+        } catch (error) {
+          console.error("Error:", error);
+        }
+      }
+    }
+    // Initialize the map
+    function initMap() {
+      var customStyle = [
+        {
+          featureType: "all",
+          elementType: "labels",
+          stylers: [
+            {
+              visibility: "off",
+            },
+          ],
+        },
+      ];
+      var mapOptions = {
+        zoom: 12,
+        center: { lat: 37.7749, lng: -122.4194 },
+        mapTypeId: google.maps.MapTypeId.ROADMAP,
+        styles: customStyle,
+        streetViewControl: false,
+        mapTypeControlOptions: {
+          mapTypeIds: [
+            google.maps.MapTypeId.ROADMAP,
+            google.maps.MapTypeId.TERRAIN,
+          ],
+        },
+      };
+
+      map = new google.maps.Map(document.getElementById("map"), mapOptions);
+
+      // Add click event listener to the map
+      map.addListener("click", function (event) {
+        if (originalMarker) {
+          originalMarker.setMap(null);
+        }
+        clearCurrentPolygon();
+
+        originalMarker = new google.maps.Marker({
+          position: event.latLng,
+          map: map,
+        });
+
+        map.panTo(event.latLng);
+        updateStatusMessage("Calculating (0/3)...");
+        const radiusInMiles = 15; // Set the desired radius in miles
+        const numberOfPoints = 30; // Set the desired number of points
+        const origin = event.latLng; // clicked on point
+        const points = generatePointsAround(
+          origin,
+          radiusInMiles,
+          numberOfPoints
+        );
+
+        //Generate list of points in time radius
+        const travelMode = google.maps.TravelMode.TRANSIT;
+        const threshold = 7; // minutes
+
+        //30 min
+        getPointsWithinTimeThreshold(origin, points, travelMode, 30)
+          .then((inRangePoints30) => {
+            console.log("Filtered points (30 min):", inRangePoints30);
+            drawViablePolygon(inRangePoints30, "4E164B");
+            updateStatusMessage("Calculating (1/3)...");
+            const area = google.maps.geometry.spherical.computeArea(inRangePoints30);
+            updatearea30Message((area / 2589988.11).toFixed(2) + " Freedom Units");
+
+            //20 min
+            return getPointsWithinTimeThreshold(
+              origin,
+              inRangePoints30,
+              travelMode,
+              20
+            );
+          })
+          .then((inRangePoints20) => {
+            console.log("Filtered points (20 min):", inRangePoints20);
+            drawViablePolygon(inRangePoints20, "B93344");
+            updateStatusMessage("Calculating (2/3)...");
+            const area = google.maps.geometry.spherical.computeArea(inRangePoints20);
+            updatearea20Message((area / 2589988.11).toFixed(2) + " Freedom Units");
+
+            //10 min
+            return getPointsWithinTimeThreshold(
+              origin,
+              inRangePoints20,
+              travelMode,
+              10
+            );
+          })
+          .then((inRangePoints10) => {
+            console.log("Filtered points (10 min):", inRangePoints10);
+            drawViablePolygon(inRangePoints10, "FB7B42");
+            updateStatusMessage("Complete"); // Calculate the area of the polygons
+            const inRangePoints10Coordinates =
+              convertInRangePointsToCoordinates(inRangePoints10);
+            const area10 = calculatePolygonArea(inRangePoints10Coordinates);
+            console.log("Area (10 min):", area10);
+            //drawPolygon(inRangePoints10);
+            const area = google.maps.geometry.spherical.computeArea(inRangePoints10);
+            updatearea10Message((area / 2589988.11).toFixed(2) + " Freedom Units");
+            console.log("G-AreaCalc:",area);
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+        // Draw a polygon using the generated points
+        //drawPolygon(points);
+      });
+    }
+  </script>
+</body>
+
+{% endblock %}

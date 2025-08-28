@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+{% extends 'layout.html' %}
+
+{% block title %}
+Trial Inter Page
+{% endblock %}
+
+{% block content %}
+<h1>Welcome to the Trial Inter Page</h1>
+<p>This is the trial inter page content.</p>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Map Example</title>
+    <style>
+        /* Add some styling to the input and dropdown */
+        input,
+        select {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 16px;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Create the input box for the desired time -->
+    <label for="time">Desired Time:</label>
+    <input type="text" id="time" name="time" />
+
+    <!-- Create the dropdown selection menu for the transit type -->
+    <label for="transit-type">Transit Type:</label>
+    <select id="transit-type" name="transit-type">
+        <option value="DRIVING">Driving</option>
+        <option value="WALKING">Walking</option>
+        <option value="BICYCLING">Bicycling</option>
+        <option value="TRANSIT">Transit</option>
+    </select>
+
+    <!-- Add a button labeled "Go" to initiate the map creation or refresh -->
+    <button id="go-button">Go</button>
+
+    <!-- Create the div to hold the map -->
+    <div id="map" style="width: 500px; height: 500px;"></div>
+
+    <!-- Include the Google Maps API script -->
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&libraries=geometry,places&callback=initMap"
+        async defer></script>
+
+    <!-- Add the JavaScript code to initialize the map and handle the input and dropdown selection -->
+    <script>
+        var map;
+        var originalMarker;
+        let currentPolygon = null;
+
+        //---------------------------Function 1
+        function calculateReachablePoints(startPoint, travelMode, threshold) {
+            // Generate a set of points around the starting point to query
+            // You may use a grid or any other method to generate these points
+
+            const points = generatePointsAround(startPoint, 10, 18);
+
+            const distanceMatrixService = new google.maps.DistanceMatrixService();
+
+            distanceMatrixService.getDistanceMatrix(
+                {
+                    origins: [startPoint],
+                    destinations: points,
+                    travelMode: travelMode,
+                    unitSystem: google.maps.UnitSystem.IMPERIAL, // or IMPERIAL
+                },
+                function (response, status) {
+                    if (status === google.maps.DistanceMatrixStatus.OK) {
+                        // Filter points that meet the threshold
+                        const reachablePoints = filterReachablePoints(response, threshold, startPoint);
+
+                        // Proceed to drawing the isochrone polygon
+                        drawIsochronePolygon(reachablePoints);
+                    } else {
+                        console.error("Distance Matrix request failed: ", status);
+                    }
+                }
+            );
+        }
+        //===========================
+        function drawPolygon(points) {
+            // Clear the previous polygon, if it exists
+            if (currentPolygon) {
+                currentPolygon.setMap(null);
+            }
+
+            // Create a new polygon using the provided points
+            currentPolygon = new google.maps.Polygon({
+                paths: points,
+                strokeColor: "#FF0000",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: "#FF0000",
+                fillOpacity: 0.35,
+                map: map,
+            });
+        }
+        function drawViablePolygon(points) {
+            // Clear the previous polygon, if it exists
+            if (currentPolygon) {
+                currentPolygon.setMap(null);
+            }
+
+            // Create a new polygon using the provided points
+            currentPolygon = new google.maps.Polygon({
+                paths: points,
+                strokeColor: "#00FF00",
+                strokeOpacity: 0.8,
+                strokeWeight: 2,
+                fillColor: "#00FF00",
+                fillOpacity: 0.35,
+                map: map,
+            });
+        }
+        //----------
+        function generatePointsAround(center, radiusInMiles, numberOfPoints) {
+            const points = [];
+            // Convert radius from miles to kilometers
+            const radius = radiusInMiles * 1.60934;
+
+            for (let i = 0; i < numberOfPoints; i++) {
+                const angle = (2 * Math.PI * i) / numberOfPoints;
+                const dx = radius * Math.cos(angle);
+                const dy = radius * Math.sin(angle);
+
+                const lat = center.lat() + (180 * dy) / (6371 * Math.PI);
+                const lng = center.lng() + (180 * dx) / (6371 * Math.PI * Math.cos((Math.PI * center.lat()) / 180));
+
+                points.push(new google.maps.LatLng(lat, lng));
+            }
+            return points;
+        }
+        //==========
+        //---------
+        function filterReachablePoints(response, threshold, origin) {
+            const reachablePoints = [];
+
+            const rows = response.rows[0].elements;
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].status === "OK") {
+                    const travelDuration = rows[i].duration.value / 60; // Convert seconds to minutes
+                    if (travelDuration <= (threshold+1)&&travelDuration >= (threshold-1)) {
+                        reachablePoints.push(response.destinationAddresses[i]);
+                    }
+                    else {
+                        reachablePoints.push(pointcalculation(rows[i], threshold, rows.length, origin, i))
+                    }
+                }
+            }
+
+            return reachablePoints;
+        }
+        //=========
+        //**********
+        function pointcalculation(tempPoint, time, number_Points, origin, i) {
+            if(tempPoint.duration.value <= (time+1)&&tempPoint.duration.value >= (time-1)){
+                return tempPoint;
+            }
+            else if (tempPoint.duration.value / 60 < time) {
+                const point1 = origin;
+                const point2 = new google.maps.LatLng(lat2, lng2);
+                const distanceInMeters = google.maps.geometry.spherical.computeDistanceBetween(origin, point2);
+                const tempradius = distanceInMeters/1000*1.5;
+                const tempangle = (2 * Math.PI * i) / number_Points;
+                const tempdx = tempradius * Math.cos(tempangle);
+                const tempdy = tempradius * Math.sin(tempangle);
+                const templat = origin.lat() + (180 * dy) / (6371 * Math.PI);
+                const templng = origin.lng() + (180 * dx) / (6371 * Math.PI * Math.cos((Math.PI * center.lat()) / 180));
+                tempPoint.lat = templat;
+                tempPoint.lng = templng;
+                pointcalculation(tempPoint)
+            }
+            else if (tempPoint.duration.value / 60 > time) {
+                const point1 = origin;
+                const point2 = new google.maps.LatLng(lat2, lng2);
+                const distanceInMeters = google.maps.geometry.spherical.computeDistanceBetween(origin, point2);
+                const tempradius = distanceInMeters/1000/2;
+                const tempangle = (2 * Math.PI * i) / number_Points;
+                const tempdx = tempradius * Math.cos(tempangle);
+                const tempdy = tempradius * Math.sin(tempangle);
+                const templat = origin.lat() + (180 * dy) / (6371 * Math.PI);
+                const templng = origin.lng() + (180 * dx) / (6371 * Math.PI * Math.cos((Math.PI * center.lat()) / 180));
+                tempPoint.lat = templat;
+                tempPoint.lng = templng;
+                pointcalculation(tempPoint)
+            }
+            else {
+                return null;
+            }
+        }
+        //*********
+        //---------
+        function getPolygonCoords(reachablePoints) {
+            // Convert the reachable points into LatLng objects
+            const latLngPoints = reachablePoints.map((point) => {
+                const latLng = point.split(",").map((coord) => parseFloat(coord));
+                return new google.maps.LatLng(latLng[0], latLng[1]);
+            });
+
+            // Sort the points by their angle from the starting point
+            latLngPoints.sort((a, b) => {
+                return Math.atan2(a.lat() - startPoint.lat(), a.lng() - startPoint.lng()) -
+                    Math.atan2(b.lat() - startPoint.lat(), b.lng() - startPoint.lng());
+            });
+
+            return latLngPoints;
+        }
+        //=========
+        // Initialize the map
+        function initMap() {
+            var customStyle = [
+                {
+                    featureType: "all",
+                    elementType: "labels",
+                    stylers: [
+                        {
+                            visibility: "off",
+                        },
+                    ],
+                }
+            ];
+            var mapOptions = {
+                zoom: 12,
+                center: { lat: 37.7749, lng: -122.4194 },
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                styles: customStyle,
+                streetViewControl: false, mapTypeControlOptions:
+                {
+                    mapTypeIds: [google.maps.MapTypeId.ROADMAP, google.maps.MapTypeId.TERRAIN]
+                }
+            };
+
+            map = new google.maps.Map(document.getElementById('map'), mapOptions);
+
+            // Add click event listener to the map
+            map.addListener("click", function (event) {
+                if (originalMarker) {
+                    originalMarker.setMap(null);
+                }
+                originalMarker = new google.maps.Marker({
+                    position: event.latLng,
+                    map: map,
+                });
+                // Add this inside the click event listener, after setting the originalMarker
+                const travelMode = google.maps.TravelMode[document.getElementById("transit-type").value, "DRIVING"];
+                const threshold = parseInt(document.getElementById("time").value, 10);
+                calculateReachablePoints(event.latLng, travelMode, threshold);
+                map.panTo(event.latLng);
+
+                // Generate points around the clicked location
+                const radiusInMiles = 1; // Set the desired radius in miles
+                const numberOfPoints = 18; // Set the desired number of points
+                const points = generatePointsAround(event.latLng, radiusInMiles, numberOfPoints);
+
+
+                //Generate list of points in time radius
+              //  const inRangePoints = 
+                // Draw a polygon using the generated points
+
+                drawPolygon(points);
+
+                //Get clicked on adress
+
+                //----------------------------Generate Isochrone Polygon
+                let isochronePolygon = null;
+
+                function drawIsochronePolygon(reachablePoints) {
+                    if (isochronePolygon) {
+                        isochronePolygon.setMap(null);
+                    }
+
+                    const polygonCoords = getPolygonCoords(reachablePoints);
+                    isochronePolygon = new google.maps.Polygon({
+                        paths: polygonCoords,
+                        strokeColor: "#FF0000",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#FF0000",
+                        fillOpacity: 0.35,
+                        map: map,
+                    });
+                }
+                //==============================
+                //------------------------------Go button event listener
+                document.getElementById("go-button").addEventListener("click", function () {
+                    if (originalMarker) {
+                        const travelMode = google.maps.TravelMode[document.getElementById("transit-type").value];
+                        const threshold = parseInt(document.getElementById("time").value, 600);
+                        calculateReachablePoints(originalMarker.getPosition(), travelMode, threshold);
+                    }
+                });
+                //===============================
+
+                var geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ location: event.latLng }, function (results, status) {
+                    if (status === "OK" && results[0]) {
+                        var address = results[0].formatted_address;
+
+                        //Writes adress to terminal output
+                        console.log(address);
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', '/trial_inter/ajax');
+                        xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+                        xhr.onload = function () {
+                            if (xhr.status === 200 && xhr.responseText) {
+                                console.log(xhr.responseText);
+                            }
+                        };
+                        xhr.send(JSON.stringify({ address: address }));
+                    }
+                });
+
+            });
+        };
+
+    </script>
+</body>
+
+
+{% endblock %}
