@@ -6,11 +6,11 @@ app = Flask(__name__)
 @app.route('/')
 @app.route('/home')
 def home():
-    return render_template('home.html', api_key='AIzaSyAAaBbOLTG04ZZdNzjiUCqHw_YDB1FOmlY')
+    return render_template('home.html', api_key='null')
 
 @app.route('/trial_inter')
 def trial_inter():
-    return render_template('trial_inter.html', api_key='AIzaSyAAaBbOLTG04ZZdNzjiUCqHw_YDB1FOmlY')
+    return render_template('trial_inter.html', api_key='null')
 
 @app.route('/trial_inter/ajax', methods=['POST'])
 def trial_inter_ajax():
@@ -20,11 +20,11 @@ def trial_inter_ajax():
 
 @app.route('/trial_2')
 def trial_2():
-    return render_template('trial_2.html', api_key='AIzaSyAAaBbOLTG04ZZdNzjiUCqHw_YDB1FOmlY')
+    return render_template('trial_2.html', api_key='null')
 
 @app.route('/iso_trial')
 def iso_trial():
-    return render_template('iso_trial.html',api_key='AIzaSyAAaBbOLTG04ZZdNzjiUCqHw_YDB1FOmlY')
+    return render_template('iso_trial.html',api_key='null')
 
 
 @app.route('/log_error', methods=['POST'])
@@ -40,3 +40,4 @@ def log_error():
 
 if __name__ == '__main__':
     app.run()
+
